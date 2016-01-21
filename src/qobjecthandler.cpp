@@ -38,6 +38,7 @@
 #define HTTP_POST    "POST"
 #define HTTP_PUT     "PUT"
 #define HTTP_HEAD    "HEAD"
+#define HTTP_DELETE  "DELETE"
 #define HTTP_CONNECT "CONNECT"
 
 QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
@@ -53,7 +54,7 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantM
     QJsonDocument document = QJsonDocument::fromJson(socket->readAll(), &error);
 
     // Ensure that the document is valid
-    if(error.error != QJsonParseError::NoError && socket->method() != HTTP_GET) {
+    if(error.error != QJsonParseError::NoError && (socket->method() == HTTP_POST || socket->method() == HTTP_PUT)) {
         socket->writeError(QHttpSocket::BadRequest);
         return;
     }
@@ -70,7 +71,7 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantM
     // Convert the return value to JSON and write it to the socket
     QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
     socket->setHeader("Content-Length", QByteArray::number(data.length()));
-    socket->setHeader("Content-Type", "application/json");
+    socket->setHeader("Content-Type", "application/json; charset=utf-8");
     socket->write(data);
     socket->close();
 }
@@ -97,12 +98,12 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
 {
     // Only GET | POST requests are accepted - reject any other methods but ensure
     // that the Allow header is set in order to comply with RFC 2616
-    if(socket->method() != HTTP_POST && socket->method() != HTTP_GET) {
-        socket->setHeader("Allow", HTTP_POST);
-        socket->setHeader("Allow", HTTP_GET);
+    if(socket->method() != HTTP_POST && socket->method() != HTTP_GET && socket->method() != HTTP_DELETE && socket->method() != HTTP_PUT) {
+        socket->setHeader("Allow", QString("%1, %2, %3, %4").arg(HTTP_GET).arg(HTTP_PUT).arg(HTTP_POST).arg(HTTP_DELETE).toLocal8Bit());
         socket->writeError(QHttpSocket::MethodNotAllowed);
         return;
     }
+
     QStringList pathSplit = path.split("?");
     QVariantMap queryString;
     if(socket->method() == HTTP_GET && pathSplit.length() > 1) {
@@ -113,7 +114,14 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
             queryString[kv[0]] = kv[1];
         }
     }
-    QString methodName = socket->method().toLower() + "_" + pathSplit[0];
+
+    QString methodName;
+    if(pathSplit[0].isEmpty()) {
+        methodName = "http_";
+        methodName += socket->method().toLower();
+    } else {
+         methodName = socket->method().toLower() + "_" + pathSplit[0];
+    }
 
     // Determine the index of the slot with the specified name - note that we
     // don't need to worry about retrieving the index for deleteLater() since

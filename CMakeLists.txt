@@ -30,8 +30,8 @@ set(EXAMPLES_INSTALL_DIR "${LIB_INSTALL_DIR}/${PROJECT_NAME}/examples" CACHE STR
 
 find_package(Qt5Network 5.1 REQUIRED)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_subdirectory(src)
 
