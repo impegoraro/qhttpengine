@@ -75,6 +75,10 @@ protected:
      */
     virtual void process(QHttpSocket *socket, const QString &path);
 
+    /**
+     * @brief HTTP Status code to be sent
+     */
+    int httpStatusCode;
 private:
 
     QObjectHandlerPrivate *const d;

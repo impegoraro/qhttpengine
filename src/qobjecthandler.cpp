@@ -49,6 +49,7 @@ QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
 
 void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantMap *queryString)
 {
+    q->httpStatusCode = -1;
     // Attempt to decode the JSON from the socket
     QJsonParseError error;
     QJsonDocument document = QJsonDocument::fromJson(socket->readAll(), &error);
@@ -70,6 +71,8 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantM
 
     // Convert the return value to JSON and write it to the socket
     QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
+    if(q->httpStatusCode > -1)
+        socket->setStatusCode(q->httpStatusCode);
     socket->setHeader("Content-Length", QByteArray::number(data.length()));
     socket->setHeader("Content-Type", "application/json; charset=utf-8");
     socket->write(data);
@@ -89,7 +92,7 @@ void QObjectHandlerPrivate::onReadChannelFinished()
 }
 
 QObjectHandler::QObjectHandler(QObject *parent)
-    : QHttpHandler(parent),
+    : QHttpHandler(parent), httpStatusCode(-1),
       d(new QObjectHandlerPrivate(this))
 {
 }
