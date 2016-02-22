@@ -79,6 +79,11 @@ protected:
      * @brief HTTP Status code to be sent
      */
     int httpStatusCode;
+
+    /**
+     * @brief HTTP query string. This variable will hold the query string of the current GET method being executed.
+     */
+    QVariantMap queryString;
 private:
 
     QObjectHandlerPrivate *const d;

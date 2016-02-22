@@ -21,6 +21,7 @@
  */
 
 #include <iostream>
+#include <utility>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -49,6 +50,8 @@ QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
 
 void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantMap *queryString)
 {
+    if(queryString != NULL)
+        q->queryString = std::move(*queryString);
     q->httpStatusCode = -1;
     // Attempt to decode the JSON from the socket
     QJsonParseError error;
@@ -57,6 +60,7 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantM
     // Ensure that the document is valid
     if(error.error != QJsonParseError::NoError && (socket->method() == HTTP_POST || socket->method() == HTTP_PUT)) {
         socket->writeError(QHttpSocket::BadRequest);
+        q->queryString.empty();
         return;
     }
 
@@ -64,10 +68,12 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantM
     QVariantMap retVal;
     if(!q->metaObject()->method(index).invoke(q,
             Q_RETURN_ARG(QVariantMap, retVal),
-            Q_ARG(QVariantMap, (queryString != NULL ? *queryString : document.object().toVariantMap())))) {
+            Q_ARG(QVariantMap, document.object().toVariantMap()))) {
         socket->writeError(QHttpSocket::InternalServerError);
+        q->queryString.empty();
         return;
     }
+    q->queryString.empty();
 
     // Convert the return value to JSON and write it to the socket
     QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
