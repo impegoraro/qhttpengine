@@ -26,6 +26,8 @@
 #include <QObject>
 #include <QRegExp>
 
+#include <functional>
+
 #include "qhttpengine.h"
 #include "qhttpsocket.h"
 
@@ -105,6 +107,10 @@ public:
      */
     void route(QHttpSocket *socket, const QString &path);
 
+    /**
+     * @brief Sets the authentication function that shall determine how basic authentication is validated.
+     */
+    void setBasicAuthentication(std::function<bool(QString, QString)> fn);
 protected:
 
     /**
@@ -120,6 +126,8 @@ private:
 
     QHttpHandlerPrivate *const d;
     friend class QHttpHandlerPrivate;
+
+    std::function<bool(QString, QString)> basic_authentication;
 };
 
 #endif // QHTTPENGINE_QHTTPHANDLER_H

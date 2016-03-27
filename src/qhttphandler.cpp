@@ -48,6 +48,30 @@ void QHttpHandler::addSubHandler(const QRegExp &pattern, QHttpHandler *handler)
 
 void QHttpHandler::route(QHttpSocket *socket, const QString &path)
 {
+    // check for basic authentication credentials, if enabled.
+    if(basic_authentication != nullptr) {
+        if(!socket->headers().contains("Authorization")) {
+            socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
+            socket->writeError(QHttpSocket::Unauthorized);
+            return;
+        } else  {
+            QString authHeader = socket->headers()["Authorization"];
+            QStringList basic = authHeader.split(" ");
+            if(basic.length() != 2 || basic[0] != "Basic") {
+                socket->writeError(QHttpSocket::Unauthorized);
+                socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
+                return;
+            }
+            QString auth = QByteArray::fromBase64(basic[1].toLatin1());
+            QStringList cred = auth.split(":");
+            if(cred.length() != 2 || !basic_authentication(cred[0], cred[1])) {
+                socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
+                socket->writeError(QHttpSocket::Unauthorized);
+                return;
+            }
+        }
+    }
+
     // Check each of the redirects for a match
     foreach(Redirect redirect, d->redirects) {
         if(redirect.first.indexIn(path) != -1) {
@@ -76,4 +100,9 @@ void QHttpHandler::process(QHttpSocket *socket, const QString &)
 {
     // The default response is simply a 404 error
     socket->writeError(QHttpSocket::NotFound);
+}
+
+void QHttpHandler::setBasicAuthentication(std::function<bool(QString, QString)> fn)
+{
+    basic_authentication = fn;
 }
