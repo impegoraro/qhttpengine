@@ -90,6 +90,12 @@ class QHTTPENGINE_EXPORT QHttpSocket : public QIODevice
     Q_OBJECT
 
 public:
+    constexpr static const char* HTTP_GET     = "GET";
+    constexpr static const char* HTTP_POST    = "POST";
+    constexpr static const char* HTTP_PUT     = "PUT";
+    constexpr static const char* HTTP_HEAD    = "HEAD";
+    constexpr static const char* HTTP_DELETE  = "DELETE";
+    constexpr static const char* HTTP_CONNECT = "CONNECT";
 
     /**
      * Predefined constants for HTTP status codes
@@ -161,6 +167,14 @@ public:
      * parsed.
      */
     QByteArray path() const;
+
+    /**
+     * @brief Retrieve the request query string
+     *
+     * This method may only be called after the request headers have been
+     * parsed.
+     */
+    QVariantMap queryString() const;
 
     /**
      * @brief Determine if the request headers have been parsed yet

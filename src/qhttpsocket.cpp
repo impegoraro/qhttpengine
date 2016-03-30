@@ -207,6 +207,24 @@ QByteArray QHttpSocket::path() const
     return d->requestPath;
 }
 
+QVariantMap QHttpSocket::queryString() const
+{
+    QString tmpPath(d->requestPath);
+    QVariantMap queryString;
+
+    QStringList pathSplit = tmpPath.split("?");
+    if(d->requestMethod == HTTP_GET && pathSplit.length() > 1) {
+        QStringList qstr = pathSplit[1].split("&");
+        foreach(QString q, qstr) {
+            QStringList kv = q.split("=");
+            if(kv.length() != 2) break;
+            queryString[kv[0]] = kv[1];
+        }
+    }
+
+    return queryString;
+}
+
 bool QHttpSocket::isHeadersParsed() const
 {
     return d->readState > QHttpSocketPrivate::ReadHeaders;
