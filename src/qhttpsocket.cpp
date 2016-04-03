@@ -204,7 +204,11 @@ QByteArray QHttpSocket::method() const
 
 QByteArray QHttpSocket::path() const
 {
-    return d->requestPath;
+    int i{d->requestPath.indexOf('?')};
+    if(i > -1)
+        return d->requestPath.left(i);
+    else
+        return d->requestPath;
 }
 
 QVariantMap QHttpSocket::queryString() const

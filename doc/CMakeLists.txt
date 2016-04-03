@@ -1,4 +1,5 @@
 find_package(Doxygen REQUIRED)
+cmake_minimum_required(VERSION 3.5)
 
 configure_file(Doxyfile.in "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile")
 

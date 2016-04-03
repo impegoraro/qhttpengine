@@ -31,16 +31,10 @@
 #include <QMetaType>
 #include <QStringList>
 #include <QVariantMap>
+#include <QStringBuilder>
 
 #include "QHttpEngine/qobjecthandler.h"
 #include "qobjecthandler_p.h"
-
-#define HTTP_GET     "GET"
-#define HTTP_POST    "POST"
-#define HTTP_PUT     "PUT"
-#define HTTP_HEAD    "HEAD"
-#define HTTP_DELETE  "DELETE"
-#define HTTP_CONNECT "CONNECT"
 
 QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
     : QObject(handler),
@@ -48,40 +42,61 @@ QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
 {
 }
 
-void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index, QVariantMap *queryString)
+void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index)
 {
-    if(queryString != NULL)
-        q->queryString = std::move(*queryString);
+    q->queryString = socket->queryString();
     q->httpStatusCode = -1;
-    // Attempt to decode the JSON from the socket
-    QJsonParseError error;
-    QJsonDocument document = QJsonDocument::fromJson(socket->readAll(), &error);
 
-    // Ensure that the document is valid
-    if(error.error != QJsonParseError::NoError && (socket->method() == HTTP_POST || socket->method() == HTTP_PUT)) {
-        socket->writeError(QHttpSocket::BadRequest);
-        q->queryString.empty();
-        return;
-    }
+    QVariantMap retVal;
+    QByteArray rawBody = socket->readAll();
 
     // Attempt to invoke the slot
-    QVariantMap retVal;
-    if(!q->metaObject()->method(index).invoke(q,
-            Q_RETURN_ARG(QVariantMap, retVal),
-            Q_ARG(QVariantMap, document.object().toVariantMap()))) {
-        socket->writeError(QHttpSocket::InternalServerError);
-        q->queryString.empty();
-        return;
+    QMetaMethod wsMethod = q->metaObject()->method(index);
+
+    if(socket->method() == QHttpSocket::HTTP_GET || socket->method() == QHttpSocket::HTTP_DELETE) {
+        if(!wsMethod.invoke(q, Q_RETURN_ARG(QVariantMap, retVal))) {
+            socket->writeError(QHttpSocket::InternalServerError);
+            return;
+        }
+    } else {
+        if(wsMethod.parameterType(0) == QMetaType::QByteArray) {
+            if(!wsMethod.invoke(q,
+                    Q_RETURN_ARG(QVariantMap, retVal),
+                    Q_ARG(QByteArray, rawBody))) {
+                socket->writeError(QHttpSocket::InternalServerError);
+                return;
+            }
+        } else {
+            // Attempt to decode the JSON from the socket
+            QJsonParseError error;
+            QJsonDocument document = QJsonDocument::fromJson(rawBody, &error);
+
+            // Ensure that the document is valid
+            if(error.error != QJsonParseError::NoError) {
+
+                socket->writeError(QHttpSocket::BadRequest);
+                return;
+            }
+
+            if(!wsMethod.invoke(q,
+                    Q_RETURN_ARG(QVariantMap, retVal),
+                    Q_ARG(QVariantMap, document.object().toVariantMap()))) {
+                socket->writeError(QHttpSocket::InternalServerError);
+                return;
+            }
+        }
     }
-    q->queryString.empty();
 
     // Convert the return value to JSON and write it to the socket
-    QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
     if(q->httpStatusCode > -1)
         socket->setStatusCode(q->httpStatusCode);
-    socket->setHeader("Content-Length", QByteArray::number(data.length()));
-    socket->setHeader("Content-Type", "application/json; charset=utf-8");
-    socket->write(data);
+    socket->writeHeaders();
+    if(!retVal.isEmpty()) {
+        QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
+        socket->setHeader("Content-Length", QByteArray::number(data.length()));
+        socket->setHeader("Content-Type", "application/json; charset=utf-8");
+        socket->write(data);
+    }
     socket->close();
 }
 
@@ -105,38 +120,41 @@ QObjectHandler::QObjectHandler(QObject *parent)
 
 void QObjectHandler::process(QHttpSocket *socket, const QString &path)
 {
-    // Only GET | POST requests are accepted - reject any other methods but ensure
+    // Only GET | POST | PUT | DELETE requests are accepted - reject any other methods but ensure
     // that the Allow header is set in order to comply with RFC 2616
-    if(socket->method() != HTTP_POST && socket->method() != HTTP_GET && socket->method() != HTTP_DELETE && socket->method() != HTTP_PUT) {
-        socket->setHeader("Allow", QString("%1, %2, %3, %4").arg(HTTP_GET).arg(HTTP_PUT).arg(HTTP_POST).arg(HTTP_DELETE).toLocal8Bit());
+    if(socket->method() != QHttpSocket::HTTP_POST && socket->method() != QHttpSocket::HTTP_GET &&
+       socket->method() != QHttpSocket::HTTP_DELETE && socket->method() != QHttpSocket::HTTP_PUT) {
+
+        socket->setHeader("Allow", QString("%1, %2, %3, %4").arg(QHttpSocket::HTTP_GET,
+                                                                 QHttpSocket::HTTP_PUT,
+                                                                 QHttpSocket::HTTP_POST,
+                                                                 QHttpSocket::HTTP_DELETE).toLocal8Bit());
         socket->writeError(QHttpSocket::MethodNotAllowed);
         return;
     }
 
-    QStringList pathSplit = path.split("?");
-    QVariantMap queryString;
-    if(socket->method() == HTTP_GET && pathSplit.length() > 1) {
-        QStringList qstr = pathSplit[1].split("&");
-        foreach(QString q, qstr) {
-            QStringList kv = q.split("=");
-            if(kv.length() != 2) break;
-            queryString[kv[0]] = kv[1];
-        }
-    }
-
     QString methodName;
-    if(pathSplit[0].isEmpty()) {
-        methodName = "http_";
-        methodName += socket->method().toLower();
+    if(path.isEmpty()) {
+        methodName = "http_" % socket->method().toLower();
     } else {
-         methodName = socket->method().toLower() + "_" + pathSplit[0];
+        methodName = socket->method().toLower() % "_" % path;
     }
 
     // Determine the index of the slot with the specified name - note that we
     // don't need to worry about retrieving the index for deleteLater() since
     // we specify the "QVariantMap" parameter type, which no parent slots use
-    int index = metaObject()->indexOfSlot(QString("%1(QVariantMap)").arg(methodName).toUtf8().data());
+    int index;
 
+    if(socket->method() == QHttpSocket::HTTP_GET || socket->method() == QHttpSocket::HTTP_DELETE) {
+        index = metaObject()->indexOfSlot(QString("%1()").arg(methodName).toUtf8().data());
+    } else {
+        if(socket->headers().contains("Content-Type") && socket->headers().value("Content-Type").startsWith("application/json")) {
+            index = metaObject()->indexOfSlot(QString("%1(QVariantMap)").arg(methodName).toUtf8().data());
+            if(index == -1)
+                index = metaObject()->indexOfSlot(QString("%1(QByteArray)").arg(methodName).toUtf8().data());
+        } else
+            index = metaObject()->indexOfSlot(QString("%1(QByteArray)").arg(methodName).toUtf8().data());
+    }
     // If the index is invalid, the "resource" was not found
     if(index == -1) {
         socket->writeError(QHttpSocket::NotFound);
@@ -155,7 +173,7 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // or not - if so, jump to invokeSlot(), otherwise wait for the
     // readChannelFinished() signal
     if(socket->bytesAvailable() >= socket->contentLength()) {
-        d->invokeSlot(socket, index, socket->method() == HTTP_GET ? &queryString : NULL);
+        d->invokeSlot(socket, index);
     } else {
 
         // Add the socket and index to the map so that the latter can be
