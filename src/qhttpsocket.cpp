@@ -28,12 +28,12 @@
 // Predefined error response requires a simple HTML template to be returned to
 // the client describing the error condition
 const QString ErrorTemplate =
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        QStringLiteral("<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
         "<title>%1 %2</title></head><body><h1>%1 %2</h1><p>"
         "An error has occurred while trying to display the requested resource. "
         "Please contact the website owner if this error persists."
-        "</p><hr><p><em>QHttpEngine %3</em></p></body></html>";
+        "</p><hr><p><em>QHttpEngine %3</em></p></body></html>");
 
 QHttpSocketPrivate::QHttpSocketPrivate(QHttpSocket *httpSocket, QTcpSocket *tcpSocket)
     : QObject(httpSocket),

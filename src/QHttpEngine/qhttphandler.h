@@ -110,7 +110,7 @@ public:
     /**
      * @brief Sets the authentication function that shall determine how basic authentication is validated.
      */
-    void setBasicAuthentication(std::function<bool(QString, QString)> fn);
+    void setBasicAuthentication(std::function<bool(QString, QString)> fn, QString realm = QStringLiteral(""));
 protected:
 
     /**
@@ -128,6 +128,7 @@ private:
     friend class QHttpHandlerPrivate;
 
     std::function<bool(QString, QString)> basic_authentication;
+    QString authRealm;
 };
 
 #endif // QHTTPENGINE_QHTTPHANDLER_H

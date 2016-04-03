@@ -20,6 +20,8 @@
  * IN THE SOFTWARE.
  */
 
+#include <QStringBuilder>
+
 #include <QHttpEngine/QHttpHandler>
 
 #include "qhttphandler_p.h"
@@ -50,22 +52,23 @@ void QHttpHandler::route(QHttpSocket *socket, const QString &path)
 {
     // check for basic authentication credentials, if enabled.
     if(basic_authentication != nullptr) {
+        QString tmp = "Basic realm=\"" % authRealm % "\"";
         if(!socket->headers().contains("Authorization")) {
-            socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
+            socket->setHeader("WWW-Authenticate", tmp.toUtf8());
             socket->writeError(QHttpSocket::Unauthorized);
             return;
         } else  {
             QString authHeader = socket->headers()["Authorization"];
             QStringList basic = authHeader.split(" ");
             if(basic.length() != 2 || basic[0] != "Basic") {
+                socket->setHeader("WWW-Authenticate", tmp.toUtf8());
                 socket->writeError(QHttpSocket::Unauthorized);
-                socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
                 return;
             }
             QString auth = QByteArray::fromBase64(basic[1].toLatin1());
             QStringList cred = auth.split(":");
             if(cred.length() != 2 || !basic_authentication(cred[0], cred[1])) {
-                socket->setHeader("WWW-Authenticate", "Basic realm=\"nmrs_m7VKmomQ2YM3:\"");
+                socket->setHeader("WWW-Authenticate", tmp.toUtf8());
                 socket->writeError(QHttpSocket::Unauthorized);
                 return;
             }
@@ -102,7 +105,8 @@ void QHttpHandler::process(QHttpSocket *socket, const QString &)
     socket->writeError(QHttpSocket::NotFound);
 }
 
-void QHttpHandler::setBasicAuthentication(std::function<bool(QString, QString)> fn)
+void QHttpHandler::setBasicAuthentication(std::function<bool(QString, QString)> fn, QString realm)
 {
     basic_authentication = fn;
+    authRealm = realm;
 }
