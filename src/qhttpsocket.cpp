@@ -59,6 +59,8 @@ QByteArray QHttpSocketPrivate::statusReason(int statusCode) const
 {
     switch(statusCode) {
     case QHttpSocket::OK: return "OK";
+    case QHttpSocket::Created: return "CREATED";
+    case QHttpSocket::Accepted: return "Accepted";
     case QHttpSocket::MovedPermanently: return "MOVED PERMANENTLY";
     case QHttpSocket::Found: return "FOUND";
     case QHttpSocket::BadRequest: return "BAD REQUEST";
@@ -66,6 +68,7 @@ QByteArray QHttpSocketPrivate::statusReason(int statusCode) const
     case QHttpSocket::Forbidden: return "FORBIDDEN";
     case QHttpSocket::NotFound: return "NOT FOUND";
     case QHttpSocket::MethodNotAllowed: return "METHOD NOT ALLOWED";
+    case QHttpSocket::Conflict: return "CONFLICT";
     case QHttpSocket::InternalServerError: return "INTERNAL SERVER ERROR";
     default: return "UNKNOWN";
     }
