@@ -25,7 +25,7 @@
 
 #if defined(Q_OS_UNIX)
 #  include <sys/stat.h>
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_WIN32)
 #  include <aclapi.h>
 #  include <fileapi.h>
 #endif
@@ -46,47 +46,30 @@ bool QLocalFilePrivate::setPermission()
 {
 #if defined(Q_OS_UNIX)
     return chmod(q->fileName().toUtf8().constData(), S_IRUSR | S_IWUSR) == 0;
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_WIN32)
     // Windows uses ACLs to control file access - each file contains an ACL
     // which consists of one or more ACEs (access control entries) - so the
     // ACL for the file must contain only a single ACE, granting access to the
     // file owner (the current user)
 
-    // Retrieve the owner SID for the file
-    PSID pSID;
-    PSECURITY_DESCRIPTOR pSD;
-    if(GetNamedSecurityInfoW((LPCWSTR)q->fileName().utf16(),
-                             SE_FILE_OBJECT,
-                             OWNER_SECURITY_INFORMATION,
-                             &pSID,
-                             NULL,
-                             NULL,
-                             NULL,
-                             &pSD) != ERROR_SUCCESS) {
-        return false;
-    }
-
     EXPLICIT_ACCESS_W ea;
-    ZeroMemory(&ea, sizeof(EXPLICIT_ACCESS));
-    ea.grfAccessPermissions = STANDARD_RIGHTS_REQUIRED;
+    ZeroMemory(&ea, sizeof(EXPLICIT_ACCESS_W));
+    ea.grfAccessPermissions = GENERIC_ALL;
     ea.grfAccessMode = GRANT_ACCESS;
-    ea.grfInheritance = NO_INHERITANCE;
-    ea.Trustee.TrusteeForm = TRUSTEE_IS_SID;
-    ea.Trustee.ptstrName = (LPWSTR)pSID;
+    ea.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+    ea.Trustee.TrusteeForm = TRUSTEE_IS_NAME;
+    ea.Trustee.ptstrName = L"CREATOR OWNER";
 
     // Create a new ACL with a single access control entry
     PACL pACL;
     if(SetEntriesInAclW(1, &ea, NULL, &pACL) != ERROR_SUCCESS) {
-        LocalFree(pSD);
         return false;
     }
-
-    LocalFree(pSD);
 
     // Apply the ACL to the file
     if(SetNamedSecurityInfoW((LPWSTR)q->fileName().utf16(),
                              SE_FILE_OBJECT,
-                             DACL_SECURITY_INFORMATION,
+                             DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
                              NULL,
                              NULL,
                              pACL,
@@ -108,7 +91,7 @@ bool QLocalFilePrivate::setHidden()
 #if defined(Q_OS_UNIX)
     // On Unix, anything beginning with a "." is hidden
     return true;
-#elif defined(Q_OS_WIN)
+#elif defined(Q_OS_WIN32)
     return SetFileAttributesW((LPCWSTR)q->fileName().utf16(), FILE_ATTRIBUTE_HIDDEN) != 0;
 #else
     // Unsupported platform, so setHidden() must fail
