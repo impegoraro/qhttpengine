@@ -8,6 +8,7 @@ set(SRC
     qhttpbasicauth.cpp
     qhttphandler.cpp
     qhttpparser.cpp
+    qhttprange.cpp
     qhttpserver.cpp
     qhttpsocket.cpp
     qiodevicecopier.cpp

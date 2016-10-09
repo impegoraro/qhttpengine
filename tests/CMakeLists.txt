@@ -8,6 +8,7 @@ set(TESTS
     TestQHttpHandler
     TestQHttpMiddleware
     TestQHttpParser
+    TestQHttpRange
     TestQHttpServer
     TestQHttpSocket
     TestQIByteArray
