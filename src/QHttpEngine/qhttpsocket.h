@@ -107,6 +107,8 @@ public:
         Created = 201,
         /// Request was accepted for processing, not completed yet.
         Accepted = 202,
+        /// Range request was successful
+        PartialContent = 206,
         /// Resource has moved permanently
         MovedPermanently = 301,
         /// Resource is available at an alternate URI

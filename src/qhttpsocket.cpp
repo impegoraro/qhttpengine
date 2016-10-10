@@ -60,7 +60,8 @@ QByteArray QHttpSocketPrivate::statusReason(int statusCode) const
     switch(statusCode) {
     case QHttpSocket::OK: return "OK";
     case QHttpSocket::Created: return "CREATED";
-    case QHttpSocket::Accepted: return "Accepted";
+    case QHttpSocket::Accepted: return "ACCEPTED";
+    case QHttpSocket::PartialContent: return "PARTIAL CONTENT";
     case QHttpSocket::MovedPermanently: return "MOVED PERMANENTLY";
     case QHttpSocket::Found: return "FOUND";
     case QHttpSocket::BadRequest: return "BAD REQUEST";
