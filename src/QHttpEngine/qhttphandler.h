@@ -31,6 +31,11 @@
 #include "qhttpengine.h"
 #include "qhttpsocket.h"
 
+
+class QRegExp;
+class QHttpMiddleware;
+class QHttpSocket;
+
 class QHTTPENGINE_EXPORT QHttpHandlerPrivate;
 
 /**
@@ -82,6 +87,11 @@ public:
     explicit QHttpHandler(QObject *parent = 0);
 
     /**
+     * @brief Add middleware to the handler
+     */
+    void addMiddleware(QHttpMiddleware *middleware);
+
+    /**
      * @brief Add a redirect for a specific pattern
      *
      * The pattern and path will be added to an internal list that will be
@@ -107,10 +117,6 @@ public:
      */
     void route(QHttpSocket *socket, const QString &path);
 
-    /**
-     * @brief Sets the authentication function that shall determine how basic authentication is validated.
-     */
-    void setBasicAuthentication(std::function<bool(QString, QString)> fn, QString realm = QStringLiteral(""));
 protected:
 
     /**
@@ -126,9 +132,6 @@ private:
 
     QHttpHandlerPrivate *const d;
     friend class QHttpHandlerPrivate;
-
-    std::function<bool(QString, QString)> basic_authentication;
-    QString authRealm;
 };
 
 #endif // QHTTPENGINE_QHTTPHANDLER_H

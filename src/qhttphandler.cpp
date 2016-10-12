@@ -23,6 +23,8 @@
 #include <QStringBuilder>
 
 #include <QHttpEngine/QHttpHandler>
+#include <QHttpEngine/QHttpMiddleware>
+#include <QHttpEngine/QHttpSocket>
 
 #include "qhttphandler_p.h"
 
@@ -38,6 +40,11 @@ QHttpHandler::QHttpHandler(QObject *parent)
 {
 }
 
+void QHttpHandler::addMiddleware(QHttpMiddleware *middleware)
+{
+    d->middleware.append(middleware);
+}
+
 void QHttpHandler::addRedirect(const QRegExp &pattern, const QString &path)
 {
     d->redirects.append(Redirect(pattern, path));
@@ -50,28 +57,10 @@ void QHttpHandler::addSubHandler(const QRegExp &pattern, QHttpHandler *handler)
 
 void QHttpHandler::route(QHttpSocket *socket, const QString &path)
 {
-    // check for basic authentication credentials, if enabled.
-    if(basic_authentication != nullptr) {
-        QString tmp = "Basic realm=\"" % authRealm % "\"";
-        if(!socket->headers().contains("Authorization")) {
-            socket->setHeader("WWW-Authenticate", tmp.toUtf8());
-            socket->writeError(QHttpSocket::Unauthorized);
+    // Run through each of the middleware
+    foreach (QHttpMiddleware *middleware, d->middleware) {
+        if (!middleware->process(socket)) {
             return;
-        } else  {
-            QString authHeader = socket->headers()["Authorization"];
-            QStringList basic = authHeader.split(" ");
-            if(basic.length() != 2 || basic[0] != "Basic") {
-                socket->setHeader("WWW-Authenticate", tmp.toUtf8());
-                socket->writeError(QHttpSocket::Unauthorized);
-                return;
-            }
-            QString auth = QByteArray::fromBase64(basic[1].toLatin1());
-            QStringList cred = auth.split(":");
-            if(cred.length() != 2 || !basic_authentication(cred[0], cred[1])) {
-                socket->setHeader("WWW-Authenticate", tmp.toUtf8());
-                socket->writeError(QHttpSocket::Unauthorized);
-                return;
-            }
         }
     }
 
@@ -106,8 +95,3 @@ void QHttpHandler::process(QHttpSocket *socket, const QString &)
     socket->close();
 }
 
-void QHttpHandler::setBasicAuthentication(std::function<bool(QString, QString)> fn, QString realm)
-{
-    basic_authentication = fn;
-    authRealm = realm;
-}
