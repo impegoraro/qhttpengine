@@ -24,7 +24,7 @@
 
 #include "QHttpEngine/qhttpparser.h"
 
-void QHttpParser::split(const QByteArray &data, const QByteArray &delim, int maxSplit, QList<QByteArray> &parts)
+void QHttpParser::split(const QByteArray &data, const QByteArray &delim, int maxSplit, QByteArrayList &parts)
 {
     int index = 0;
 
