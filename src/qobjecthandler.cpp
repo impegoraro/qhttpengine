@@ -44,60 +44,76 @@ QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
 
 void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index)
 {
-    q->queryString = socket->queryString();
-    q->httpStatusCode = -1;
-
     QVariantMap retVal;
-    QByteArray rawBody = socket->readAll();
+    QGenericReturnArgument ret;
+    bool writeReturn = false;
 
     // Attempt to invoke the slot
     QMetaMethod wsMethod = q->metaObject()->method(index);
 
+    if(wsMethod.returnType() != QMetaType::Void) {
+        ret = Q_RETURN_ARG(QVariantMap, retVal);
+        writeReturn = true;
+    }
+
     if(socket->method() == QHttpSocket::HTTP_GET || socket->method() == QHttpSocket::HTTP_DELETE) {
-        if(!wsMethod.invoke(q, Q_RETURN_ARG(QVariantMap, retVal))) {
+        if(!wsMethod.invoke(q, ret, Q_ARG(QHttpSocket*, socket))) {
             socket->writeError(QHttpSocket::InternalServerError);
             return;
         }
     } else {
-        if(wsMethod.parameterType(0) == QMetaType::QByteArray) {
-            if(!wsMethod.invoke(q,
-                    Q_RETURN_ARG(QVariantMap, retVal),
-                    Q_ARG(QByteArray, rawBody))) {
+        if(wsMethod.parameterCount() == 1) {
+            if(!wsMethod.invoke(q, ret, Q_ARG(QHttpSocket*, socket))) {
                 socket->writeError(QHttpSocket::InternalServerError);
                 return;
             }
+        } else if(wsMethod.parameterCount() == 2) {
+            QByteArray rawBody;
+            QJsonDocument document;
+
+            rawBody = socket->readAll();
+
+            if(wsMethod.parameterType(1) == QMetaType::QByteArray) {
+                if(!wsMethod.invoke(q, ret,
+                                    Q_ARG(QHttpSocket*, socket),
+                                    Q_ARG(QByteArray, rawBody))) {
+                    socket->writeError(QHttpSocket::InternalServerError);
+                    return;
+                }
+            } else {
+                // Attempt to decode the JSON from the socket
+                QJsonParseError error;
+                document = QJsonDocument::fromJson(rawBody, &error);
+
+                // Ensure that the document is valid
+                if(error.error != QJsonParseError::NoError) {
+                    socket->writeError(QHttpSocket::BadRequest);
+                    return;
+                }
+                if(!wsMethod.invoke(q, ret,
+                                    Q_ARG(QHttpSocket*, socket),
+                                    Q_ARG(QVariantMap, document.object().toVariantMap()))) {
+                    socket->writeError(QHttpSocket::InternalServerError);
+                    return;
+                }
+            }
+
         } else {
-            // Attempt to decode the JSON from the socket
-            QJsonParseError error;
-            QJsonDocument document = QJsonDocument::fromJson(rawBody, &error);
+            socket->writeError(QHttpSocket::InternalServerError);
+            return ;
+        }
 
-            // Ensure that the document is valid
-            if(error.error != QJsonParseError::NoError) {
+    }
 
-                socket->writeError(QHttpSocket::BadRequest);
-                return;
-            }
-
-            if(!wsMethod.invoke(q,
-                    Q_RETURN_ARG(QVariantMap, retVal),
-                    Q_ARG(QVariantMap, document.object().toVariantMap()))) {
-                socket->writeError(QHttpSocket::InternalServerError);
-                return;
-            }
+    if(writeReturn) {
+        socket->writeHeaders();
+        if(!retVal.isEmpty()) {
+            QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
+            socket->setHeader("Content-Length", QByteArray::number(data.length()));
+            socket->setHeader("Content-Type", "application/json; charset=utf-8");
+            socket->write(data);
         }
     }
-
-    // Convert the return value to JSON and write it to the socket
-    if(q->httpStatusCode > -1)
-        socket->setStatusCode(q->httpStatusCode);
-    socket->writeHeaders();
-    if(!retVal.isEmpty()) {
-        QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
-        socket->setHeader("Content-Length", QByteArray::number(data.length()));
-        socket->setHeader("Content-Type", "application/json; charset=utf-8");
-        socket->write(data);
-    }
-    socket->close();
 }
 
 void QObjectHandlerPrivate::onReadChannelFinished()
@@ -110,10 +126,13 @@ void QObjectHandlerPrivate::onReadChannelFinished()
 
     // Actually invoke the slot
     invokeSlot(socket, index);
+
+    // We are done with the socket, lets close it
+    socket->close();
 }
 
 QObjectHandler::QObjectHandler(QObject *parent)
-    : QHttpHandler(parent), httpStatusCode(-1),
+    : QHttpHandler(parent),
       d(new QObjectHandlerPrivate(this))
 {
 }
@@ -130,6 +149,8 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
                                                                  QHttpSocket::HTTP_POST,
                                                                  QHttpSocket::HTTP_DELETE).toLocal8Bit());
         socket->writeError(QHttpSocket::MethodNotAllowed);
+        // We are done with the socket, lets close it
+        socket->close();
         return;
     }
 
@@ -144,36 +165,50 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // don't need to worry about retrieving the index for deleteLater() since
     // we specify the "QVariantMap" parameter type, which no parent slots use
     int index;
+    bool avoidReadAll = false;
 
     if(socket->method() == QHttpSocket::HTTP_GET || socket->method() == QHttpSocket::HTTP_DELETE) {
-        index = metaObject()->indexOfSlot(QString("%1()").arg(methodName).toUtf8().data());
+        index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
     } else {
         if(socket->headers().contains("Content-Type") && socket->headers().value("Content-Type").startsWith("application/json")) {
-            index = metaObject()->indexOfSlot(QString("%1(QVariantMap)").arg(methodName).toUtf8().data());
-            if(index == -1)
-                index = metaObject()->indexOfSlot(QString("%1(QByteArray)").arg(methodName).toUtf8().data());
-        } else
-            index = metaObject()->indexOfSlot(QString("%1(QByteArray)").arg(methodName).toUtf8().data());
+            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QVariantMap)").arg(methodName).toUtf8().data());
+            if(index == -1) {
+                index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
+                avoidReadAll = true;
+            }
+        } else {
+            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QByteArray)").arg(methodName).toUtf8().data());
+            if(index == -1) {
+                index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
+                avoidReadAll = true;
+            }
+        }
     }
     // If the index is invalid, the "resource" was not found
     if(index == -1) {
         socket->writeError(QHttpSocket::NotFound);
+        // We are done with the socket, lets close it
+        socket->close();
         return;
     }
 
     // Ensure that the return type of the slot is QVariantMap
     QMetaMethod method = metaObject()->method(index);
-    if(method.returnType() != QMetaType::QVariantMap) {
+    if(method.returnType() != QMetaType::Void && method.returnType() != QMetaType::QVariantMap) {
         qCritical()<< "Return type is not valid!!!";
         socket->writeError(QHttpSocket::InternalServerError);
+        // We are done with the socket, lets close it
+        socket->close();
         return;
     }
 
     // Check to see if the socket has finished receiving all of the data yet
     // or not - if so, jump to invokeSlot(), otherwise wait for the
     // readChannelFinished() signal
-    if(socket->bytesAvailable() >= socket->contentLength()) {
+    if(avoidReadAll || (socket->bytesAvailable() >= socket->contentLength())) {
         d->invokeSlot(socket, index);
+        // We are done with the socket, lets close it
+        socket->close();
     } else {
 
         // Add the socket and index to the map so that the latter can be
