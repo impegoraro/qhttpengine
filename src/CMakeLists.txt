@@ -9,7 +9,6 @@ set(SRC
     qhttpparser.cpp
     qhttpserver.cpp
     qhttpsocket.cpp
-    qibytearray.cpp
     qiodevicecopier.cpp
     qlocalfile.cpp
     qobjecthandler.cpp
