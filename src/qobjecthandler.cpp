@@ -48,6 +48,8 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index)
     QGenericReturnArgument ret;
     bool writeReturn = false;
 
+    socket->setStatusCode(QHttpSocket::OK);
+
     // Attempt to invoke the slot
     QMetaMethod wsMethod = q->metaObject()->method(index);
 
@@ -106,13 +108,15 @@ void QObjectHandlerPrivate::invokeSlot(QHttpSocket *socket, int index)
     }
 
     if(writeReturn) {
-        socket->writeHeaders();
+        QByteArray data;
         if(!retVal.isEmpty()) {
-            QByteArray data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
+            data = QJsonDocument(QJsonObject::fromVariantMap(retVal)).toJson();
             socket->setHeader("Content-Length", QByteArray::number(data.length()));
             socket->setHeader("Content-Type", "application/json; charset=utf-8");
-            socket->write(data);
         }
+
+        socket->writeHeaders();
+        socket->write(data);
     }
 }
 
@@ -149,8 +153,6 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
                                                                  QHttpSocket::HTTP_POST,
                                                                  QHttpSocket::HTTP_DELETE).toLocal8Bit());
         socket->writeError(QHttpSocket::MethodNotAllowed);
-        // We are done with the socket, lets close it
-        socket->close();
         return;
     }
 
@@ -187,8 +189,6 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // If the index is invalid, the "resource" was not found
     if(index == -1) {
         socket->writeError(QHttpSocket::NotFound);
-        // We are done with the socket, lets close it
-        socket->close();
         return;
     }
 
@@ -197,8 +197,6 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     if(method.returnType() != QMetaType::Void && method.returnType() != QMetaType::QVariantMap) {
         qCritical()<< "Return type is not valid!!!";
         socket->writeError(QHttpSocket::InternalServerError);
-        // We are done with the socket, lets close it
-        socket->close();
         return;
     }
 
