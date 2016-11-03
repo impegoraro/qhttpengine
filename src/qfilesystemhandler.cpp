@@ -84,6 +84,9 @@ void QFilesystemHandlerPrivate::processFile(QHttpSocket *socket, const QString &
     QIODeviceCopier *copier = new QIODeviceCopier(file, socket);
     connect(copier, SIGNAL(finished()), copier, SLOT(deleteLater()));
     connect(copier, SIGNAL(finished()), file, SLOT(deleteLater()));
+    connect(copier, &QIODeviceCopier::finished, [socket]() {
+        socket->close();
+    });
 
     qint64 fileSize = file->size();
 
@@ -118,7 +121,6 @@ void QFilesystemHandlerPrivate::processFile(QHttpSocket *socket, const QString &
 
     // Start the copy
     copier->start();
-    socket->close();
 }
 
 void QFilesystemHandlerPrivate::processDirectory(QHttpSocket *socket, const QString &path, const QString &absolutePath)
