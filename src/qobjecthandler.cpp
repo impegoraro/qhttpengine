@@ -206,7 +206,8 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     if(avoidReadAll || (socket->bytesAvailable() >= socket->contentLength())) {
         d->invokeSlot(socket, index);
         // We are done with the socket, lets close it
-        socket->close();
+        if(!avoidReadAll)
+            socket->close(); // close the socket if the request is handled normally
     } else {
 
         // Add the socket and index to the map so that the latter can be

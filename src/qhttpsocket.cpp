@@ -162,7 +162,7 @@ void QHttpSocketPrivate::readData()
 
     // Check to see if the specified amount of data has been read from the
     // socket, if so, emit the readChannelFinished() signal
-    if(requestDataRead + readBuffer.size() >= requestDataTotal) {
+    if(requestDataRead != -1 && requestDataRead + readBuffer.size() >= requestDataTotal) {
         readState = ReadFinished;
         Q_EMIT q->readChannelFinished();
     }
