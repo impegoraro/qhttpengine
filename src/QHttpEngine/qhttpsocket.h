@@ -23,6 +23,7 @@
 #ifndef QHTTPENGINE_QHTTPSOCKET_H
 #define QHTTPENGINE_QHTTPSOCKET_H
 
+#include <QHostAddress>
 #include <QTcpSocket>
 
 #include "qhttpengine.h"
@@ -142,6 +143,11 @@ public:
      * make itself the parent of the socket.
      */
     QHttpSocket(QTcpSocket *socket, QObject *parent = 0);
+
+    /**
+     * @brief Retrieves the peer address
+     */
+    QHostAddress peerAddress() const;
 
     /**
      * @brief Retrieve the number of bytes available for reading

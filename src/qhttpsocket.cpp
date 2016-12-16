@@ -176,6 +176,11 @@ QHttpSocket::QHttpSocket(QTcpSocket *socket, QObject *parent)
     setOpenMode(QIODevice::ReadWrite);
 }
 
+QHostAddress QHttpSocket::peerAddress() const
+{
+    return d->socket->peerAddress();
+}
+
 qint64 QHttpSocket::bytesAvailable() const
 {
     if(d->readState > QHttpSocketPrivate::ReadHeaders) {
