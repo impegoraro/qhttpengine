@@ -22,53 +22,42 @@
 
 #include <QTcpSocket>
 
+#if !defined(QT_NO_SSL)
+#  include <QSslSocket>
+#endif
+
 #include "QHttpEngine/qhttpserver.h"
 #include "QHttpEngine/qhttpsocket.h"
 #include "qhttpserver_p.h"
 
 QHttpServerPrivate::QHttpServerPrivate(QHttpServer *httpServer)
     : QObject(httpServer),
-      q(httpServer),
-      handler(0)
+      handler(0),
+      q(httpServer)
 {
-    connect(q, SIGNAL(newConnection()), this, SLOT(onIncomingConnection()));
-}
-
-void QHttpServerPrivate::onIncomingConnection()
-{
-    // Obtain the next pending connection and create a QHttpSocket from it
-    QTcpSocket *tcpSocket = q->nextPendingConnection();
-    QHttpSocket *httpSocket = new QHttpSocket(tcpSocket, this);
-
-    // Wait until the socket finishes reading the HTTP headers before routing
-    connect(httpSocket, SIGNAL(headersParsed()), this, SLOT(onHeadersParsed()));
-
-    // Destroy the socket once the client is disconnected
-    connect(tcpSocket, SIGNAL(disconnected()), httpSocket, SLOT(deleteLater()));
-}
-
-void QHttpServerPrivate::onHeadersParsed()
-{
-    // Obtain the socket that corresponds with the sender of the signal
-    QHttpSocket *socket = qobject_cast<QHttpSocket*>(sender());
-
-    // Ensure that a handler has been set
-    if(handler) {
-
-        // Obtain the path, strip the initial "/", and pass it along to the handler
-        handler->route(socket, QString(socket->path().mid(1)));
-
-    } else {
-
-        // Return an HTTP 500 error to the client
-        socket->writeError(QHttpSocket::InternalServerError);
-    }
 }
 
 QHttpServer::QHttpServer(QObject *parent)
     : QTcpServer(parent),
       d(new QHttpServerPrivate(this))
 {
+}
+
+void QHttpServerPrivate::process(QTcpSocket *socket)
+{
+    QHttpSocket *httpSocket = new QHttpSocket(socket, this);
+
+    // Wait until the socket finishes reading the HTTP headers before routing
+    connect(httpSocket, &QHttpSocket::headersParsed, [this, httpSocket]() {
+        if (handler) {
+            handler->route(httpSocket, QString(httpSocket->path().mid(1)));
+        } else {
+            httpSocket->writeError(QHttpSocket::InternalServerError);
+        }
+    });
+
+    // Destroy the socket once the client is disconnected
+    connect(socket, &QTcpSocket::disconnected, httpSocket, &QHttpSocket::deleteLater);
 }
 
 QHttpServer::QHttpServer(QHttpHandler *handler, QObject *parent)
@@ -81,4 +70,41 @@ QHttpServer::QHttpServer(QHttpHandler *handler, QObject *parent)
 void QHttpServer::setHandler(QHttpHandler *handler)
 {
     d->handler = handler;
+}
+
+#if !defined(QT_NO_SSL)
+void QHttpServer::setSslConfiguration(const QSslConfiguration &configuration)
+{
+    d->configuration = configuration;
+}
+#endif
+
+void QHttpServer::incomingConnection(qintptr socketDescriptor)
+{
+#if !defined(QT_NO_SSL)
+    if (!d->configuration.isNull()) {
+
+        // Initialize the socket with the SSL configuration
+        QSslSocket *socket = new QSslSocket(this);
+
+        // Wait until encryption is complete before processing the socket
+        connect(socket, &QSslSocket::encrypted, [this, socket]() {
+            d->process(socket);
+        });
+
+        socket->setSocketDescriptor(socketDescriptor);
+        socket->setSslConfiguration(d->configuration);
+        socket->startServerEncryption();
+
+    } else {
+#endif
+
+    QTcpSocket *socket = new QTcpSocket(this);
+    socket->setSocketDescriptor(socketDescriptor);
+    // Process the socket immediately
+    d->process(socket);
+
+#if !defined(QT_NO_SSL)
+    }
+#endif
 }

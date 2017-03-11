@@ -32,6 +32,10 @@
 
 class QHTTPENGINE_EXPORT QHttpServerPrivate;
 
+#if !defined(QT_NO_SSL)
+class QSslConfiguration;
+#endif
+
 /**
  * @brief TCP server for HTTP requests
  * @headerfile qhttpserver.h QHttpEngine/QHttpServer
@@ -78,6 +82,24 @@ public:
      */
     void setHandler(QHttpHandler *handler);
 
+#if !defined(QT_NO_SSL)
+    /**
+     * @brief Set the SSL configuration for the server
+     *
+     * If the configuration is not NULL, the server will begin negotiating
+     * connections using SSL/TLS.
+     */
+    void setSslConfiguration(const QSslConfiguration &configuration);
+#endif
+
+protected:
+
+    /**
+     * @brief Implementation of QTcpServer::incomingConnection()
+     */
+    void incomingConnection(qintptr socketDescriptor);
+
+    
 private:
 
     QHttpServerPrivate *const d;
