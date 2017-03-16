@@ -82,7 +82,7 @@ public:
     /**
      * @brief Parse HTTP request headers
      */
-    static bool parseRequestHeaders(const QByteArray &data, QByteArray &method, QByteArray &path, QHttpHeaderMap &headers);
+    static bool parseRequestHeaders(const QByteArray &data, QByteArray version, QByteArray &method, QByteArray &path, QHttpHeaderMap &headers);
 
     /**
      * @brief Parse HTTP response headers

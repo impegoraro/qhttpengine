@@ -165,6 +165,13 @@ public:
     virtual bool isSequential() const;
 
     /**
+     * @brief Determine if connection is keep-alive
+     *
+     * This method will return true in case of a keep-alive connection.
+     */
+    virtual bool isKeepAlive() const;
+
+    /**
      * @brief Close the device and underlying socket
      *
      * Invoking this method signifies that no more data will be written to the

@@ -131,8 +131,9 @@ void QObjectHandlerPrivate::onReadChannelFinished()
     // Actually invoke the slot
     invokeSlot(socket, index);
 
-    // We are done with the socket, lets close it
-    socket->close();
+    if(!socket->isKeepAlive())
+        // We are done with the socket, lets close it
+        socket->close();
 }
 
 QObjectHandler::QObjectHandler(QObject *parent)
@@ -206,7 +207,8 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     if(avoidReadAll || (socket->bytesAvailable() >= socket->contentLength())) {
         d->invokeSlot(socket, index);
         // We are done with the socket, lets close it
-        if(!avoidReadAll)
+        if(!avoidReadAll && !socket->isKeepAlive())
+            // We are done with the socket, lets close it
             socket->close(); // close the socket if the request is handled normally
     } else {
 

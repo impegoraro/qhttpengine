@@ -77,7 +77,7 @@ bool QHttpParser::parseHeaders(const QByteArray &data, QList<QByteArray> &parts,
     return parseHeaderList(lines, headers);
 }
 
-bool QHttpParser::parseRequestHeaders(const QByteArray &data, QByteArray &method, QByteArray &path, QHttpHeaderMap &headers)
+bool QHttpParser::parseRequestHeaders(const QByteArray &data, QByteArray version, QByteArray &method, QByteArray &path, QHttpHeaderMap &headers)
 {
     QList<QByteArray> parts;
     if(!parseHeaders(data, parts, headers)) {
@@ -91,6 +91,7 @@ bool QHttpParser::parseRequestHeaders(const QByteArray &data, QByteArray &method
 
     method = parts[0];
     path = parts[1];
+    version = parts[2];
 
     return true;
 }

@@ -85,7 +85,9 @@ void QFilesystemHandlerPrivate::processFile(QHttpSocket *socket, const QString &
     connect(copier, SIGNAL(finished()), copier, SLOT(deleteLater()));
     connect(copier, SIGNAL(finished()), file, SLOT(deleteLater()));
     connect(copier, &QIODeviceCopier::finished, [socket]() {
-        socket->close();
+        if(!socket->isKeepAlive())
+            // We are done with the socket, lets close it
+            socket->close();
     });
 
     qint64 fileSize = file->size();
@@ -144,7 +146,9 @@ void QFilesystemHandlerPrivate::processDirectory(QHttpSocket *socket, const QStr
     socket->setHeader("Content-Type", "text/html");
     socket->setHeader("Content-Length", QByteArray::number(data.length()));
     socket->write(data);
-    socket->close();
+    if(!socket->isKeepAlive())
+        // We are done with the socket, lets close it
+        socket->close();
 }
 
 QFilesystemHandler::QFilesystemHandler(QObject *parent)

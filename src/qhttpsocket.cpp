@@ -44,12 +44,19 @@ QHttpSocketPrivate::QHttpSocketPrivate(QHttpSocket *httpSocket, QTcpSocket *tcpS
       requestDataTotal(-1),
       writeState(WriteNone),
       responseStatusCode(200),
-      responseStatusReason(statusReason(200))
+      responseStatusReason(statusReason(200)),
+      keepAlive{false}
 {
     socket->setParent(this);
 
     connect(socket, SIGNAL(readyRead()), this, SLOT(onReadyRead()));
     connect(socket, SIGNAL(bytesWritten(qint64)), this, SLOT(onBytesWritten(qint64)));
+
+    connect(&timerKeepAlive, &QTimer::timeout, [] () {
+        qCritical()<< "Keep alived socket timeout, closing";
+    });
+    connect(&timerKeepAlive, SIGNAL(timeout()), httpSocket, SLOT(close()));
+    timerKeepAlive.setInterval(5000);
 
     // Process anything already received by the socket
     onReadyRead();
@@ -80,19 +87,24 @@ void QHttpSocketPrivate::onReadyRead()
     // Append all of the new data to the read buffer
     readBuffer.append(socket->readAll());
 
-    // If reading headers, return if they could not be read (yet)
-    if(readState == ReadHeaders) {
-        if(!readHeaders()) {
+    // Read data if in that state, otherwise discard
+    switch (readState) {
+    case ReadHeaders:
+        // If reading headers, return if they could not be read (yet)
+        if (!readHeaders()) {
             return;
         }
-    }
-
-    if(readState == ReadData) {
+        break;
+    case ReadData:
         readData();
-    } else if(readState == ReadFinished) {
-
-        // Any data received here is unexpected and should be ignored
+        break;
+    case ReadFinished:
         readBuffer.clear();
+        if(timerKeepAlive.isActive()) {
+            readState  = ReadHeaders;
+            writeState  = WriteHeaders;
+        }
+        break;
     }
 }
 
@@ -124,7 +136,7 @@ bool QHttpSocketPrivate::readHeaders()
 
     // Attempt to parse the headers and if a problem is encountered, abort
     // the connection (so that no more data is read or written) and return
-    if(!QHttpParser::parseRequestHeaders(readBuffer.left(index), requestMethod, requestPath, requestHeaders)) {
+    if(!QHttpParser::parseRequestHeaders(readBuffer.left(index), requestVersion, requestMethod, requestPath, requestHeaders)) {
         q->writeError(QHttpSocket::BadRequest);
         return false;
     }
@@ -138,8 +150,20 @@ bool QHttpSocketPrivate::readHeaders()
     if(requestHeaders.contains("Content-Length")) {
         readState = ReadData;
         requestDataTotal = requestHeaders.value("Content-Length").toLongLong();
-    } else {
-        readState = ReadFinished;
+    }
+
+    // Check for the Keep-Alive header or if request is HTTP 1.1
+    // assume Keep-Alive if not told otherwise.
+    if(requestVersion  == "HTTP/1.1") {
+         if(!requestHeaders.contains("Connection") || requestHeaders.value("Connection") == "keep-alive") {
+             qCritical()<< "Debug turn on keep-alive socket";
+             keepAlive = true;
+             timerKeepAlive.start();
+         }
+    } else if(requestHeaders.contains("Connection") && requestHeaders.value("Connection") == "keep-alive") {
+        qCritical()<< "Debug turn on keep-alive socket";
+        keepAlive = true;
+        timerKeepAlive.start();
     }
 
     // Indicate that the headers have been parsed
@@ -158,6 +182,10 @@ void QHttpSocketPrivate::readData()
     // Emit the readyRead() signal if any data is available in the buffer
     if(readBuffer.size()) {
         Q_EMIT q->readyRead();
+    }
+
+    if(keepAlive) {
+        timerKeepAlive.start(); // restart the timer upon activity
     }
 
     // Check to see if the specified amount of data has been read from the
@@ -193,6 +221,11 @@ qint64 QHttpSocket::bytesAvailable() const
 bool QHttpSocket::isSequential() const
 {
     return true;
+}
+
+bool QHttpSocket::isKeepAlive() const
+{
+    return d->keepAlive;
 }
 
 void QHttpSocket::close()
@@ -276,7 +309,17 @@ void QHttpSocket::writeHeaders()
     QByteArray header;
 
     // Append the status line
-    header.append("HTTP/1.0 ");
+    if(d->requestVersion  == "HTTP/1.1") {
+        header.append("HTTP/1.1 ");
+        if (!isKeepAlive()) {
+            d->responseHeaders.insert("Connection", "close");
+        }
+    } else {
+        header.append("HTTP/1.0 ");
+        if (isKeepAlive()) {
+            d->responseHeaders.insert("Connection", "keep-alive");
+        }
+    }
     header.append(QByteArray::number(d->responseStatusCode) + " " + d->responseStatusReason);
     header.append("\r\n");
 
@@ -303,7 +346,10 @@ void QHttpSocket::writeRedirect(const QByteArray &path, bool permanent)
     setStatusCode(permanent ? MovedPermanently : Found);
     setHeader("Location", path);
     writeHeaders();
-    close();
+
+    if (!isKeepAlive())
+        // We are done with the socket, lets close it
+        close();
 }
 
 void QHttpSocket::writeError(int statusCode, const QByteArray &statusReason)
@@ -322,7 +368,11 @@ void QHttpSocket::writeError(int statusCode, const QByteArray &statusReason)
 
     writeHeaders();
     write(data);
-    close();
+
+    if(!isKeepAlive())
+        // We are done with the socket, lets close it
+        close();
+
 }
 
 qint64 QHttpSocket::readData(char *data, qint64 maxlen)
@@ -345,6 +395,9 @@ qint64 QHttpSocket::readData(char *data, qint64 maxlen)
 
 qint64 QHttpSocket::writeData(const char *data, qint64 len)
 {
+    if(d->keepAlive)
+        d->timerKeepAlive.start(); // restart the timer upon socket activity
+
     // If the response headers have not yet been written, they must
     // immediately be written before the data can be
     if(d->writeState == QHttpSocketPrivate::WriteNone) {

@@ -25,6 +25,7 @@
 
 #include <QObject>
 #include <QTcpSocket>
+#include <QTimer>
 
 #include "QHttpEngine/qhttpparser.h"
 #include "QHttpEngine/qhttpsocket.h"
@@ -48,6 +49,7 @@ public:
         ReadFinished
     } readState;
 
+    QByteArray requestVersion;
     QByteArray requestMethod;
     QByteArray requestPath;
     QHttpHeaderMap requestHeaders;
@@ -65,6 +67,8 @@ public:
     QByteArray responseStatusReason;
     QHttpHeaderMap responseHeaders;
     qint64 responseHeaderRemaining;
+    bool keepAlive;
+    QTimer timerKeepAlive;
 
 private Q_SLOTS:
 
