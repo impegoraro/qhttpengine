@@ -160,7 +160,7 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     if(path.isEmpty()) {
         methodName = "http_" % socket->method().toLower();
     } else {
-        methodName = socket->method().toLower() % "_" % path;
+        methodName = socket->method().toLower() % "_" % path.split('/')[0];
     }
 
     // Determine the index of the slot with the specified name - note that we

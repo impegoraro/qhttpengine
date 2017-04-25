@@ -226,7 +226,8 @@ QVariantMap QHttpSocket::queryString() const
     QVariantMap queryString;
 
     QStringList pathSplit = tmpPath.split("?");
-    if(d->requestMethod == HTTP_GET && pathSplit.length() > 1) {
+
+    if(pathSplit.length() > 1) {
         QStringList qstr = pathSplit[1].split("&");
         foreach(QString q, qstr) {
             QStringList kv = q.split("=");
