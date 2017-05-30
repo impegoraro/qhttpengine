@@ -104,6 +104,13 @@ public:
     void addRedirect(const QRegExp &pattern, const QString &path);
 
     /**
+     * @brief Remove a redirect for a specific pattern
+     *
+     * The redirect pattern will be removed from the internal list of redirects.
+     */
+    void removeRedirect(const QRegExp &pattern);
+
+    /**
      * @brief Add a handler for a specific pattern
      *
      * The pattern and handler will be added to an internal list that will be
@@ -111,6 +118,13 @@ public:
      * request matches any patterns. The order of the list is preserved.
      */
     void addSubHandler(const QRegExp &pattern, QHttpHandler *handler);
+
+    /**
+     * @brief Remove a subHandler for a specific pattern
+     *
+     * The sub handler pattern will be removed from the internal list of sub handlers.
+     */
+    void removeSubHandler(const QRegExp &pattern);
 
     /**
      * @brief Route an incoming request

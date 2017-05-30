@@ -27,6 +27,8 @@
 #include <QHttpEngine/QHttpSocket>
 
 #include "qhttphandler_p.h"
+#include <algorithm>
+
 
 QHttpHandlerPrivate::QHttpHandlerPrivate(QHttpHandler *handler)
     : QObject(handler),
@@ -50,9 +52,23 @@ void QHttpHandler::addRedirect(const QRegExp &pattern, const QString &path)
     d->redirects.append(Redirect(pattern, path));
 }
 
+void QHttpHandler::removeRedirect(const QRegExp &pattern)
+{
+    d->redirects.erase(std::remove_if(d->redirects.begin(), d->redirects.end(), [pattern] (const Redirect & r) -> bool {
+        return r.first == pattern;
+    }));
+}
+
 void QHttpHandler::addSubHandler(const QRegExp &pattern, QHttpHandler *handler)
 {
     d->subHandlers.append(SubHandler(pattern, handler));
+}
+
+void QHttpHandler::removeSubHandler(const QRegExp &pattern)
+{
+    d->subHandlers.erase(std::remove_if(d->subHandlers.begin(), d->subHandlers.end(), [pattern] (const SubHandler & r) -> bool {
+        return r.first == pattern;
+    }));
 }
 
 void QHttpHandler::route(QHttpSocket *socket, const QString &path)
