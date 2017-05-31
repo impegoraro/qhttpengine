@@ -1,0 +1,16 @@
+--- src/QHttpEngine/qhttpparser.h	2016-11-02 10:56:41.397994069 +0000
++++ src/QHttpEngine/qhttpparser.h	2016-11-02 10:56:12.645049603 +0000
+@@ -29,6 +29,13 @@
+ #include "qhttpengine.h"
+ #include "qibytearray.h"
+ 
++#if QT_VERSION < QT_VERSION_CHECK(5, 4, 0)
++
++typedef QList<QByteArray> QByteArrayList;
++
++#endif
++
++
+ /**
+  * @brief Map consisting of HTTP headers
+  *
