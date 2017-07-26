@@ -36,6 +36,20 @@
 #include "QHttpEngine/qobjecthandler.h"
 #include "qobjecthandler_p.h"
 
+namespace
+{
+
+bool is_method_async_response(const QMetaMethod &method)
+{
+    return method.returnType() == QMetaType::Void;
+}
+
+bool does_method_handle_request_body(const QMetaMethod &method)
+{
+    return method.parameterCount() >= 2;
+}
+
+}
 QObjectHandlerPrivate::QObjectHandlerPrivate(QObjectHandler *handler)
     : QObject(handler),
       q(handler)
@@ -131,8 +145,12 @@ void QObjectHandlerPrivate::onReadChannelFinished()
     // Actually invoke the slot
     invokeSlot(socket, index);
 
-    // We are done with the socket, lets close it
-    socket->close();
+    if (!is_method_async_response(metaObject()->method(index))) {
+        // We are done with the socket, lets close it
+        socket->close();
+    } else {
+        // the method is resposible to close directly/indirectly the socket
+    }
 }
 
 QObjectHandler::QObjectHandler(QObject *parent)
@@ -167,25 +185,23 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // don't need to worry about retrieving the index for deleteLater() since
     // we specify the "QVariantMap" parameter type, which no parent slots use
     int index;
-    bool avoidReadAll = false;
 
     if(socket->method() == QHttpSocket::HTTP_GET || socket->method() == QHttpSocket::HTTP_DELETE) {
         index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
+    }
+    else
+    if(socket->headers().contains("Content-Type") && socket->headers().value("Content-Type").startsWith("application/json")) {
+        index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QVariantMap)").arg(methodName).toUtf8().data());
+        if(index == -1) {
+            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
+        }
     } else {
-        if(socket->headers().contains("Content-Type") && socket->headers().value("Content-Type").startsWith("application/json")) {
-            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QVariantMap)").arg(methodName).toUtf8().data());
-            if(index == -1) {
-                index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
-                avoidReadAll = true;
-            }
-        } else {
-            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QByteArray)").arg(methodName).toUtf8().data());
-            if(index == -1) {
-                index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
-                avoidReadAll = true;
-            }
+        index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*,QByteArray)").arg(methodName).toUtf8().data());
+        if(index == -1) {
+            index = metaObject()->indexOfSlot(QString("%1(QHttpSocket*)").arg(methodName).toUtf8().data());
         }
     }
+
     // If the index is invalid, the "resource" was not found
     if(index == -1) {
         socket->writeError(QHttpSocket::NotFound);
@@ -203,11 +219,12 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // Check to see if the socket has finished receiving all of the data yet
     // or not - if so, jump to invokeSlot(), otherwise wait for the
     // readChannelFinished() signal
-    if(avoidReadAll || (socket->bytesAvailable() >= socket->contentLength())) {
+    if(does_method_handle_request_body(method) || (socket->bytesAvailable() >= socket->contentLength())) {
         d->invokeSlot(socket, index);
         // We are done with the socket, lets close it
-        if(!avoidReadAll)
-            socket->close(); // close the socket if the request is handled normally
+        if (!is_method_async_response(metaObject()->method(index))) {
+            socket->close();
+        }
     } else {
 
         // Add the socket and index to the map so that the latter can be
