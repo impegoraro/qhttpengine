@@ -127,6 +127,12 @@ public:
     void removeSubHandler(const QRegExp &pattern);
 
     /**
+     * @brief
+     *
+     */
+    void addAlias(const QRegExp &pattern, const QString& handler);
+
+    /**
      * @brief Route an incoming request
      */
     void route(QHttpSocket *socket, const QString &path);

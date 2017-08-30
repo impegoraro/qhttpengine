@@ -59,6 +59,11 @@ void QHttpHandler::removeRedirect(const QRegExp &pattern)
     }));
 }
 
+void QHttpHandler::addAlias(const QRegExp &pattern, const QString &path)
+{
+    d->aliases.append(Aliases(pattern, path));
+}
+
 void QHttpHandler::addSubHandler(const QRegExp &pattern, QHttpHandler *handler)
 {
     d->subHandlers.append(SubHandler(pattern, handler));
@@ -96,6 +101,18 @@ void QHttpHandler::route(QHttpSocket *socket, const QString &path)
     foreach(SubHandler subHandler, d->subHandlers) {
         if(subHandler.first.indexIn(path) != -1) {
             subHandler.second->route(socket, path.mid(subHandler.first.matchedLength()));
+            return;
+        }
+    }
+
+    // Check each of the aliases for a match
+    foreach(Aliases alias, d->aliases) {
+        if(alias.first.indexIn(path) != -1) {
+            QString newPath = alias.second;
+            foreach(QString replacement, alias.first.capturedTexts().mid(1)) {
+                newPath = newPath.arg(replacement);
+            }
+            process(socket, newPath);
             return;
         }
     }
