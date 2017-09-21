@@ -143,7 +143,12 @@ void QObjectHandlerPrivate::onReadChannelFinished()
     int index = map.take(socket);
 
     // Actually invoke the slot
-    invokeSlot(socket, index);
+    try {
+        invokeSlot(socket, index);
+    } catch (std::exception ex) {
+        qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, message: "<< ex.what();
+        socket->writeError(QHttpSocket::InternalServerError);
+    }
 
     if (!is_method_async_response(metaObject()->method(index))) {
         // We are done with the socket, lets close it
@@ -220,7 +225,13 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
     // or not - if so, jump to invokeSlot(), otherwise wait for the
     // readChannelFinished() signal
     if(does_method_handle_request_body(method) || (socket->bytesAvailable() >= socket->contentLength())) {
-        d->invokeSlot(socket, index);
+        try {
+            d->invokeSlot(socket, index);
+        } catch (std::exception &ex) {
+            qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, message: "<< ex.what();
+            socket->writeError(QHttpSocket::InternalServerError);
+        }
+
         // We are done with the socket, lets close it
         if (!is_method_async_response(metaObject()->method(index))) {
             socket->close();
