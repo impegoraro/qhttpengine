@@ -148,6 +148,10 @@ void QObjectHandlerPrivate::onReadChannelFinished()
     } catch (std::exception ex) {
         qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, message: "<< ex.what();
         socket->writeError(QHttpSocket::InternalServerError);
+    } catch (...) {
+        qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, unknown type";
+        socket->writeError(QHttpSocket::InternalServerError);
+        throw;
     }
 
     if (!is_method_async_response(metaObject()->method(index))) {
@@ -230,6 +234,10 @@ void QObjectHandler::process(QHttpSocket *socket, const QString &path)
         } catch (std::exception &ex) {
             qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, message: "<< ex.what();
             socket->writeError(QHttpSocket::InternalServerError);
+        } catch (...) {
+            qWarning().noquote().nospace()<< "[QHttpEngine]"<< " unhandled exception, unknown type";
+            socket->writeError(QHttpSocket::InternalServerError);
+            throw;
         }
 
         // We are done with the socket, lets close it
